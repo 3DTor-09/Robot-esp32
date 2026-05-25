@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Robot ESP32</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  background:#080c10;color:#c8dff0;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:24px 16px 40px;
+  background-image:
+    radial-gradient(ellipse 80% 40% at 50% 0%,rgba(0,229,255,0.07) 0%,transparent 70%),
+    repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(0,229,255,0.03) 40px),
+    repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(0,229,255,0.03) 40px);
+}
+header{
+  width:100%;max-width:420px;display:flex;align-items:center;gap:12px;
+  margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #1a2d45;
+}
+.logo{width:32px;height:32px;border-radius:50%;background:#00e5ff;flex-shrink:0;
+  box-shadow:0 0 14px rgba(0,229,255,0.7);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 8px rgba(0,229,255,0.4)}50%{box-shadow:0 0 24px rgba(0,229,255,1)}}
+h1{font-size:1rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase}
+h1 span{color:#00e5ff}
+.ble-badge{
+  margin-left:auto;font-size:0.6rem;padding:4px 9px;border-radius:20px;
+  border:1px solid #4a6680;color:#4a6680;white-space:nowrap;transition:all 0.3s;
+}
+.ble-badge.connected{border-color:#00e5ff;color:#00e5ff}
+.ble-badge.connecting{border-color:#ffaa00;color:#ffaa00;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0.3}}
+
+/* Connexion */
+.connect-card{
+  width:100%;max-width:420px;background:#0d1520;border:1px solid #1a2d45;
+  border-radius:14px;padding:18px;margin-bottom:14px;text-align:center;
+  transition:border-color 0.3s;
+}
+#btn-connect{
+  background:linear-gradient(135deg,#00e5ff,#0080ff);
+  border:none;border-radius:10px;color:#000;font-weight:800;
+  font-size:0.95rem;letter-spacing:0.08em;padding:16px 28px;cursor:pointer;
+  text-transform:uppercase;transition:all 0.2s;width:100%;
+  -webkit-appearance:none;
+}
+#btn-connect:active{transform:scale(0.97);opacity:0.85}
+#btn-connect:disabled{background:#1a2d45;color:#4a6680;cursor:not-allowed}
+.connect-hint{margin-top:8px;font-size:0.65rem;color:#4a6680;line-height:1.5}
+
+/* Erreur */
+.error-box{
+  width:100%;max-width:420px;background:rgba(255,61,113,0.1);
+  border:1px solid #ff3d71;border-radius:10px;padding:12px 16px;
+  margin-bottom:14px;font-size:0.72rem;color:#ff3d71;line-height:1.6;
+  display:none;
+}
+.error-box.on{display:block}
+
+/* Sensor */
+.sensor{
+  width:100%;max-width:420px;background:#0d1520;border:1px solid #1a2d45;
+  border-radius:14px;padding:12px 16px;margin-bottom:12px;
+  display:flex;align-items:center;gap:12px;
+}
+.si{font-size:1.4rem}
+.sl{font-size:0.55rem;letter-spacing:0.1em;text-transform:uppercase;color:#4a6680;margin-bottom:2px}
+.sv{font-size:1.4rem;font-weight:700;color:#00e5ff;transition:color 0.3s}
+.sv.danger{color:#ff3d71;animation:blink 0.5s step-end infinite}
+.badge{
+  margin-left:auto;background:rgba(255,61,113,0.15);border:1px solid #ff3d71;
+  color:#ff3d71;border-radius:7px;padding:4px 8px;font-size:0.6rem;
+  font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+  display:none;animation:blink 0.6s step-end infinite;
+}
+.badge.on{display:block}
+
+/* State bar */
+.statebar{
+  width:100%;max-width:420px;background:#0d1520;border:1px solid #1a2d45;
+  border-radius:10px;padding:8px 14px;margin-bottom:20px;
+  display:flex;align-items:center;gap:8px;font-size:0.7rem;letter-spacing:0.08em;
+}
+.sdot{width:7px;height:7px;border-radius:50%;background:#4a6680;flex-shrink:0;transition:all 0.3s}
+.sdot.on{background:#00e5ff;box-shadow:0 0 8px #00e5ff}
+#st{color:#00e5ff}
+
+/* D-Pad — grande taille pour les doigts sur iPhone */
+.dpad{
+  display:grid;
+  grid-template-columns:repeat(3,90px);
+  grid-template-rows:repeat(3,90px);
+  gap:10px;margin-bottom:20px;
+}
+.btn{
+  display:flex;align-items:center;justify-content:center;
+  border-radius:16px;border:1px solid #1a2d45;background:#0d1520;
+  cursor:pointer;font-size:1.8rem;color:#c8dff0;
+  transition:all 0.1s;user-select:none;-webkit-user-select:none;
+  /* Important pour iOS : évite le délai tactile */
+  touch-action:manipulation;
+}
+.btn:active,.btn.pr{
+  border-color:#00e5ff;background:rgba(0,229,255,0.12);
+  box-shadow:0 0 18px rgba(0,229,255,0.35);transform:scale(0.92);
+}
+.btn.disabled{opacity:0.25;pointer-events:none}
+.stop{border-color:#ff3d71;color:#ff3d71}
+.stop:active,.stop.pr{
+  border-color:#ff3d71;background:rgba(255,61,113,0.12);
+  box-shadow:0 0 18px rgba(255,61,113,0.35);
+}
+.empty{background:transparent;border:none;pointer-events:none}
+
+footer{font-size:0.58rem;color:#4a6680;letter-spacing:0.08em;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"></div>
+  <h1>ROBO <span>ESP32</span></h1>
+  <div class="ble-badge" id="ble-badge">● BLE</div>
+</header>
+
+<div class="connect-card" id="connect-card">
+  <button id="btn-connect" onclick="connectBLE()">⬡ Connecter le robot</button>
+  <div class="connect-hint">Allume le robot · active le Bluetooth iPhone<br>puis appuie sur Connecter</div>
+</div>
+
+<div class="error-box" id="err-box"></div>
+
+<div class="sensor">
+  <div class="si">📡</div>
+  <div>
+    <div class="sl">Distance obstacle</div>
+    <div class="sv" id="dv">---</div>
+  </div>
+  <div class="badge" id="obs-badge">⚠ STOP</div>
+</div>
+
+<div class="statebar">
+  <div class="sdot" id="sdot"></div>
+  ÉTAT :&nbsp;<span id="st">NON CONNECTÉ</span>
+</div>
+
+<div class="dpad">
+  <div class="empty"></div>
+  <div class="btn disabled" id="bf"
+    ontouchstart="go('F');return false"
+    ontouchend="go('S');return false">▲</div>
+  <div class="empty"></div>
+
+  <div class="btn disabled" id="bl"
+    ontouchstart="go('L');return false"
+    ontouchend="go('S');return false">◀</div>
+  <div class="btn stop disabled" id="bs"
+    ontouchstart="go('S');return false">■</div>
+  <div class="btn disabled" id="br"
+    ontouchstart="go('R');return false"
+    ontouchend="go('S');return false">▶</div>
+
+  <div class="empty"></div>
+  <div class="btn disabled" id="bb"
+    ontouchstart="go('B');return false"
+    ontouchend="go('S');return false">▼</div>
+  <div class="empty"></div>
+</div>
+
+<footer>CYTRON ROBO ESP32 · BLUEFY BLE</footer>
+
+<script>
+// UUIDs — identiques au firmware
+var SVC  = '12345678-1234-1234-1234-123456789abc';
+var CMD  = '12345678-1234-1234-1234-123456789ab1';
+var STAT = '12345678-1234-1234-1234-123456789ab2';
+
+var labels = {F:'AVANCE',B:'RECULE',L:'GAUCHE',R:'DROITE',S:'ARRÊT'};
+var btnIds = {F:'bf',B:'bb',L:'bl',R:'br',S:'bs'};
+
+var bleDevice = null;
+var cmdChar   = null;
+var connected = false;
+var sending   = false;
+
+function showError(msg) {
+  var b = document.getElementById('err-box');
+  b.textContent = msg;
+  b.className = 'error-box on';
+}
+function hideError() {
+  document.getElementById('err-box').className = 'error-box';
+}
+
+async function connectBLE() {
+  hideError();
+
+  if (!navigator.bluetooth) {
+    showError('❌ Bluetooth non disponible.\nOuvre ce fichier dans Bluefy (pas Safari).');
+    return;
+  }
+
+  var btn   = document.getElementById('btn-connect');
+  var badge = document.getElementById('ble-badge');
+
+  try {
+    btn.disabled = true;
+    btn.textContent = '⏳ Recherche...';
+    badge.className = 'ble-badge connecting';
+    badge.textContent = '● CONNEXION...';
+
+    // Bluefy / iOS : on filtre par nom
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{name: 'Robot-ESP32'}],
+      optionalServices: [SVC]
+    });
+
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+    btn.textContent = '⏳ Liaison GATT...';
+    var server  = await bleDevice.gatt.connect();
+    var service = await server.getPrimaryService(SVC);
+    cmdChar     = await service.getCharacteristic(CMD);
+
+    // Notifications statut
+    var statChar = await service.getCharacteristic(STAT);
+    await statChar.startNotifications();
+    statChar.addEventListener('characteristicvaluechanged', onStatus);
+
+    onConnected();
+
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '⬡ Connecter le robot';
+    badge.className = 'ble-badge';
+    badge.textContent = '● BLE';
+    if (e.name !== 'NotFoundError' && e.name !== 'AbortError') {
+      showError('❌ Erreur : ' + e.message + '\n\nVérifie que le robot est allumé et proche.');
+    }
+  }
+}
+
+function onConnected() {
+  connected = true;
+  hideError();
+  var btn = document.getElementById('btn-connect');
+  btn.disabled = false;
+  btn.textContent = '✓ Connecté — Déconnecter';
+  btn.onclick = disconnectBLE;
+  document.getElementById('ble-badge').className = 'ble-badge connected';
+  document.getElementById('ble-badge').textContent = '● CONNECTÉ';
+  document.getElementById('connect-card').style.borderColor = '#00e5ff';
+  document.getElementById('st').textContent = 'ARRÊT';
+  document.querySelectorAll('.btn').forEach(function(b){b.classList.remove('disabled')});
+}
+
+function onDisconnected() {
+  connected = false;
+  cmdChar   = null;
+  var btn = document.getElementById('btn-connect');
+  btn.disabled = false;
+  btn.textContent = '⬡ Connecter le robot';
+  btn.onclick = connectBLE;
+  document.getElementById('ble-badge').className = 'ble-badge';
+  document.getElementById('ble-badge').textContent = '● BLE';
+  document.getElementById('connect-card').style.borderColor = '#1a2d45';
+  document.getElementById('st').textContent = 'DÉCONNECTÉ';
+  document.getElementById('sdot').classList.remove('on');
+  document.getElementById('dv').textContent = '---';
+  document.querySelectorAll('.btn').forEach(function(b){b.classList.add('disabled')});
+}
+
+async function disconnectBLE() {
+  if (bleDevice && bleDevice.gatt.connected) {
+    await go('S');
+    bleDevice.gatt.disconnect();
+  }
+}
+
+// Envoi commande BLE
+async function go(cmd) {
+  if (!connected || !cmdChar || sending) return;
+  sending = true;
+  try {
+    // Highlight bouton
+    document.querySelectorAll('.btn').forEach(function(b){b.classList.remove('pr')});
+    var b = document.getElementById(btnIds[cmd]);
+    if (b) b.classList.add('pr');
+    // Affichage état
+    document.getElementById('st').textContent = labels[cmd] || cmd;
+    document.getElementById('sdot').classList.toggle('on', cmd !== 'S');
+    // Envoi BLE sans réponse (plus rapide sur iOS)
+    var encoder = new TextEncoder();
+    await cmdChar.writeValueWithoutResponse(encoder.encode(cmd));
+  } catch(e) {
+    console.error('Envoi erreur:', e);
+  }
+  sending = false;
+}
+
+// Réception statut (distance + obstacle)
+function onStatus(event) {
+  try {
+    var decoder = new TextDecoder();
+    var raw = decoder.decode(event.target.value);
+    var parts = raw.split(',');
+    if (parts.length < 2) return;
+    var dist = parseFloat(parts[0]);
+    var obs  = parts[1] === '1';
+    var dv   = document.getElementById('dv');
+    if (dist < 0) { dv.textContent = '> 4m'; dv.className = 'sv'; }
+    else { dv.textContent = dist.toFixed(1) + ' cm'; dv.className = 'sv' + (obs ? ' danger' : ''); }
+    document.getElementById('obs-badge').className = 'badge' + (obs ? ' on' : '');
+    if (obs) document.getElementById('st').textContent = 'OBSTACLE !';
+  } catch(e) {}
+}
+</script>
+</body>
+</html>
